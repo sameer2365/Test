@@ -3,152 +3,801 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Morse Receive — Reliability Demo</title>
+<title>Morse — Signal Lamp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#10151A; --panel:#171F26; --panel-2:#1D262E; --line:#2A353F;
-    --amber:#FFB74D; --amber-dim:#8A6428; --teal:#35D6B8; --danger:#FF6B6B; --text:#EAF0F3; --text-dim:#8CA0AC;
+    --bg: #10151A;
+    --panel: #171F26;
+    --panel-2: #1D262E;
+    --line: #2A353F;
+    --amber: #FFB74D;
+    --amber-dim: #8A6428;
+    --teal: #35D6B8;
+    --teal-dim: #1C6F60;
+    --text: #EAF0F3;
+    --text-dim: #8CA0AC;
+    --danger: #FF6B6B;
+    --radius: 14px;
   }
   *{box-sizing:border-box;}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; padding:16px;}
-  h1{font-size:18px; margin:0 0 4px;}
-  p.sub{color:var(--text-dim); font-size:12.5px; margin:0 0 16px;}
-  #videoWrap{position:relative; border-radius:14px; overflow:hidden; background:#000; aspect-ratio:4/3; max-width:420px; margin:0 auto;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(255,183,77,0.06), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(53,214,184,0.05), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', system-ui, -apple-system, sans-serif;
+    min-height:100vh;
+    padding-bottom:76px;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  header{
+    padding:22px 20px 16px;
+    display:flex; align-items:center; gap:14px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:rgba(16,21,26,0.92); backdrop-filter:blur(8px); z-index:20;
+  }
+  .lamp{
+    width:34px; height:34px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #3a2a12, #0c0c0c 70%);
+    border:2px solid var(--amber-dim);
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.6);
+    transition: box-shadow 0.05s linear, background 0.05s linear;
+    flex-shrink:0;
+  }
+  .lamp.on{
+    background: radial-gradient(circle at 35% 30%, #FFE9B8, var(--amber) 55%);
+    box-shadow: 0 0 18px 6px rgba(255,183,77,0.65), 0 0 40px 14px rgba(255,183,77,0.25);
+    border-color: var(--amber);
+  }
+  header h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:19px; font-weight:600; margin:0; letter-spacing:0.2px;
+  }
+  header p{margin:2px 0 0; font-size:12px; color:var(--text-dim); font-family:'JetBrains Mono',monospace; letter-spacing:0.5px;}
+
+  main{max-width:640px; margin:0 auto; padding:20px 16px 8px;}
+  .screen{display:none;}
+  .screen.active{display:block; animation:fadeIn 0.18s ease;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card-title{
+    font-size:11px; text-transform:uppercase; letter-spacing:1.4px;
+    color:var(--text-dim); margin:0 0 10px; font-weight:600;
+  }
+  textarea{
+    width:100%; min-height:110px; resize:vertical;
+    background:transparent; border:none; outline:none;
+    color:var(--text); font-size:15px; line-height:1.5;
+    font-family:'Inter', sans-serif;
+  }
+  textarea.mono-field{font-family:'JetBrains Mono', monospace; font-size:14px; color:var(--teal);}
+  textarea::placeholder{color:#5A6B76;}
+
+  .row{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+  button{
+    font-family:'Inter', sans-serif; font-size:13px; font-weight:500;
+    border-radius:10px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text);
+    padding:8px 13px; cursor:pointer; transition:all 0.15s ease;
+  }
+  button:hover{border-color:#3A4854; background:#232E37;}
+  button:active{transform:scale(0.97);}
+  .btn-primary{background:var(--teal); color:#06231D; border-color:var(--teal); font-weight:600;}
+  .btn-primary:hover{background:#4EE6C8;}
+  .btn-amber{background:var(--amber); color:#3A2600; border-color:var(--amber); font-weight:600;}
+  .btn-amber:hover{background:#FFC670;}
+  .btn-ghost{background:transparent;}
+  .btn-danger{color:var(--danger); border-color:#4A2A2A;}
+
+  .swap-row{display:flex; justify-content:center; margin:-4px 0 6px;}
+  .swap-btn{
+    width:52px; height:52px; border-radius:50%;
+    background:linear-gradient(160deg, var(--teal), var(--teal-dim));
+    border:none; color:#06231D; font-size:20px; cursor:pointer;
+    box-shadow:0 4px 14px rgba(53,214,184,0.35);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .swap-btn:active{transform:scale(0.94) rotate(180deg); transition:transform 0.25s ease;}
+
+  .slider-row{margin-top:14px;}
+  .slider-label{display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-dim); margin-bottom:6px;}
+  .slider-label b{color:var(--text); font-family:'JetBrains Mono',monospace;}
+  input[type=range]{
+    -webkit-appearance:none; -moz-appearance:none; appearance:none;
+    width:100%; height:4px; border-radius:2px;
+    background:var(--line); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+    background:var(--amber); cursor:pointer; box-shadow:0 0 0 4px rgba(255,183,77,0.15);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%; border:none;
+    background:var(--amber); cursor:pointer; box-shadow:0 0 0 4px rgba(255,183,77,0.15);
+  }
+  input[type=range]::-moz-range-track{
+    height:4px; border-radius:2px; background:var(--line);
+  }
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line);}
+  .toggle-row:last-child{border-bottom:none;}
+  .toggle-row span{font-size:14px;}
+  .switch{position:relative; width:42px; height:24px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider-toggle{
+    position:absolute; inset:0; background:var(--line); border-radius:24px; cursor:pointer; transition:0.2s;
+  }
+  .slider-toggle::before{
+    content:""; position:absolute; width:18px; height:18px; left:3px; top:3px;
+    background:#fff; border-radius:50%; transition:0.2s;
+  }
+  input:checked + .slider-toggle{background:var(--teal);}
+  input:checked + .slider-toggle::before{transform:translateX(18px);}
+
+  .transport{display:flex; justify-content:center; gap:14px; margin:16px 0 6px;}
+  .transport button{
+    width:60px; height:60px; border-radius:50%; font-size:20px;
+    display:flex; align-items:center; justify-content:center; border:none;
+  }
+  .tp-play{background:linear-gradient(160deg, var(--amber), var(--amber-dim)); color:#3A2600;}
+  .tp-stop{background:var(--panel-2); color:var(--text); border:1px solid var(--line) !important;}
+
+  progress{width:100%; height:6px; border-radius:3px; overflow:hidden; margin-top:12px; accent-color:var(--amber);}
+  .estimate{font-size:12px; color:var(--text-dim); margin-top:6px; font-family:'JetBrains Mono',monospace;}
+
+  /* Receive screen */
+  #videoWrap{position:relative; border-radius:var(--radius); overflow:hidden; background:#000; aspect-ratio:4/3;}
   video{width:100%; height:100%; object-fit:cover; display:block;}
   #detectBox{
     position:absolute; width:34px; height:34px; border:2px solid var(--amber-dim); border-radius:50%;
-    top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6;
+    top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6; transition:opacity 0.1s, border-color 0.1s;
+    box-shadow:0 0 8px rgba(255,183,77,0.3);
   }
-  #detectBox.show{opacity:1; border-color:var(--danger);}
-  #detectBox::after{content:"+"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--amber-dim); font-size:14px;}
-  #detectBox.show::after{color:var(--danger);}
+  #detectBox::before{
+    content:""; position:absolute; width:1px; height:14px; background:var(--amber-dim);
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  #detectBox::after{
+    content:""; position:absolute; width:14px; height:1px; background:var(--amber-dim);
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  #detectBox.show{opacity:1; border-color:var(--danger); box-shadow:0 0 14px rgba(255,107,107,0.6);}
+  #detectBox.show::before, #detectBox.show::after{background:var(--danger);}
+  .live-morse{font-family:'JetBrains Mono',monospace; color:var(--teal); font-size:15px; min-height:20px; letter-spacing:2px;}
+  .received-box{
+    background:var(--panel-2); border-radius:10px; padding:12px; min-height:70px;
+    font-size:15px; margin-top:10px; white-space:pre-wrap; word-break:break-word;
+  }
+  .cam-msg{color:var(--text-dim); font-size:13px; text-align:center; padding:30px 10px;}
 
+  /* Lock-On Mode */
   #countdownOverlay{
     position:absolute; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center;
-    font-size:48px; font-weight:700; color:var(--amber);
+    font-size:44px; font-weight:700; color:var(--amber); z-index:5;
   }
   #countdownOverlay.hidden{display:none;}
-
   #sizeHint{
     position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:12px;
-    color:var(--amber); background:rgba(0,0,0,0.5); padding:4px; display:none;
+    color:var(--amber); background:rgba(0,0,0,0.55); padding:4px; display:none;
   }
   #sizeHint.show{display:block;}
-
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px; max-width:420px; margin-left:auto; margin-right:auto;}
-  .row{display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-bottom:1px solid var(--line);}
-  .row:last-child{border-bottom:none;}
   .status-badge{font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600;}
   .badge-searching{background:var(--panel-2); color:var(--text-dim);}
   .badge-locked{background:var(--teal); color:#06231D;}
   .badge-paused{background:var(--danger); color:#3A0A0A;}
-
-  #liveMorse{font-family:monospace; color:var(--teal); font-size:15px; min-height:20px;}
-  #receivedText{background:var(--panel-2); border-radius:10px; padding:10px; min-height:50px; font-size:14px; white-space:pre-wrap;}
   .uncertain{color:var(--danger); text-decoration:underline wavy;}
-  button{width:100%; padding:11px; border-radius:10px; border:none; background:var(--amber); color:#3A2600; font-weight:600; font-size:14px; margin-top:14px; cursor:pointer;}
-  #accuracyScore{font-size:22px; font-weight:700; color:var(--teal); text-align:center; margin-top:4px;}
+
+  /* History */
+  .hist-item{
+    background:var(--panel-2); border-radius:10px; padding:12px; margin-bottom:8px;
+    display:flex; justify-content:space-between; gap:10px; align-items:flex-start;
+  }
+  .hist-text{font-weight:600; font-size:14px;}
+  .hist-morse{font-family:'JetBrains Mono',monospace; color:var(--text-dim); font-size:12.5px; margin-top:3px;}
+  .hist-time{font-size:11px; color:#5A6B76; margin-top:4px;}
+  .hist-actions{display:flex; flex-direction:column; gap:6px;}
+  .icon-btn{background:none; border:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:2px;}
+  .empty-note{color:var(--text-dim); font-size:13px; text-align:center; padding:36px 10px;}
+
+  nav{
+    position:fixed; bottom:0; left:0; right:0;
+    background:rgba(23,31,38,0.95); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    display:flex; z-index:30;
+  }
+  nav button{
+    flex:1; background:none; border:none; border-radius:0;
+    color:var(--text-dim); font-size:11px; padding:10px 4px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  nav button.active{color:var(--amber);}
+  nav svg{width:20px; height:20px;}
+
+  .note{
+    font-size:12px; color:var(--text-dim); background:rgba(255,183,77,0.06);
+    border:1px solid rgba(255,183,77,0.2); border-radius:10px; padding:10px 12px; margin-bottom:14px;
+  }
+  #flashOverlay{
+    position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:999; transition:none;
+  }
 </style>
 </head>
 <body>
 
-<h1>Receive — Reliability Demo</h1>
-<p class="sub">Testing: countdown lock-on · multi-frame confirm · distance hint · auto-pause on signal loss · accuracy score</p>
+<div id="flashOverlay"></div>
 
-<div id="videoWrap">
-  <video id="video" playsinline autoplay muted></video>
-  <div id="detectBox"></div>
-  <div id="countdownOverlay">3</div>
-  <div id="sizeHint">Move closer</div>
-</div>
+<header>
+  <div class="lamp" id="headerLamp"></div>
+  <div>
+    <h1>Morse</h1>
+    <p>SIGNAL LAMP · OFFLINE</p>
+  </div>
+</header>
 
-<div class="card">
-  <div class="row"><span>Status</span><span class="status-badge badge-searching" id="statusBadge">Searching…</span></div>
-  <div class="row"><span>Live Morse</span></div>
-  <div id="liveMorse">&nbsp;</div>
-</div>
+<main>
 
-<div class="card">
-  <div class="row"><span>Received Text</span></div>
-  <div id="receivedText"></div>
-</div>
+  <!-- CONVERT -->
+  <section class="screen active" id="screen-convert">
+    <div class="card">
+      <div class="card-title">Text</div>
+      <textarea id="inputText" placeholder="Write text here..."></textarea>
+      <div class="row">
+        <button id="btnPaste">Paste</button>
+        <button id="btnClearText" class="btn-ghost">Clear</button>
+      </div>
+    </div>
 
-<div class="card">
-  <div class="row"><span>Session Accuracy</span></div>
-  <div id="accuracyScore">—</div>
-  <div style="font-size:11px; color:var(--text-dim); text-align:center; margin-top:4px;">% of letters decoded with confident (non-borderline) timing</div>
-</div>
+    <div class="swap-row">
+      <button class="swap-btn" id="btnSwap" title="Swap Text ⇄ Morse">⇅</button>
+    </div>
 
-<button id="btnStart">Start Camera</button>
+    <div class="card">
+      <div class="card-title">Morse Code</div>
+      <textarea id="outputMorse" class="mono-field" placeholder="Morse code will appear here..."></textarea>
+      <div class="row">
+        <button id="btnCopy">Copy</button>
+        <button id="btnShare">Share</button>
+        <button id="btnDownload">Export .txt</button>
+        <button id="btnSaveHist" class="btn-primary">Save</button>
+      </div>
+    </div>
+
+    <button class="btn-amber" style="width:100%; padding:12px; margin-bottom:10px;" id="goSend">▶ Send Morse Code</button>
+    <button class="btn-primary" style="width:100%; padding:12px;" id="goReceive">◉ Receive via Camera</button>
+  </section>
+
+  <!-- SEND -->
+  <section class="screen" id="screen-send">
+    <div class="card">
+      <div class="card-title">Message</div>
+      <textarea id="sendText" placeholder="Hello World">Hello World</textarea>
+      <div class="estimate" id="estimate">Estimated time: 0s</div>
+      <progress id="progressBar" value="0" max="100"></progress>
+    </div>
+
+    <div class="transport">
+      <button class="tp-play" id="btnPlay">▶</button>
+      <button class="tp-stop" id="btnStop">■</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Transmission Method</div>
+      <div class="toggle-row"><span>Flashlight (Torch)</span><label class="switch"><input type="checkbox" id="toggleTorch"><span class="slider-toggle"></span></label></div>
+      <div id="torchStatus" style="font-size:11.5px; color:var(--text-dim); margin:-4px 0 6px;"></div>
+      <div class="toggle-row"><span>Screen Flash</span><label class="switch"><input type="checkbox" id="toggleFlash" checked><span class="slider-toggle"></span></label></div>
+      <div class="toggle-row"><span>Speaker Beep</span><label class="switch"><input type="checkbox" id="toggleAudio" checked><span class="slider-toggle"></span></label></div>
+      <div class="toggle-row"><span>Vibrate <span style="color:#5A6B76">(mobile)</span></span><label class="switch"><input type="checkbox" id="toggleVibrate"><span class="slider-toggle"></span></label></div>
+      <div class="toggle-row"><span>Loop / transmit forever</span><label class="switch"><input type="checkbox" id="toggleLoop"><span class="slider-toggle"></span></label></div>
+    </div>
+
+    <div class="card">
+      <div class="slider-label" style="margin-bottom:0;"><span>Speed &amp; Frequency</span><b>8 WPM · 600 Hz</b></div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:5px;">Fixed for every device using this app, so Send and Receive always match automatically — no setup needed.</div>
+    </div>
+  </section>
+
+  <!-- RECEIVE -->
+  <section class="screen" id="screen-receive">
+    <div class="note">Line up the blinking light inside the box in the middle of the frame — the box stays fixed so you just aim your camera, no auto-focus hunting. Speed is fixed at 8 WPM to match every sender automatically.</div>
+    <div id="videoWrap">
+      <video id="video" playsinline autoplay muted></video>
+      <div id="detectBox"></div>
+      <div id="countdownOverlay" class="hidden">3</div>
+      <div id="sizeHint">Move closer</div>
+    </div>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">Live Morse</div>
+      <div class="row" style="margin-top:0;">
+        <span class="status-badge badge-searching" id="statusBadge">Searching…</span>
+        <span style="font-size:11px; color:var(--text-dim); margin-left:auto;">Accuracy: <b id="accuracyScore" class="mono" style="color:var(--teal);">—</b></span>
+      </div>
+      <div class="live-morse" id="liveMorse">&nbsp;</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Received Text</div>
+      <div class="received-box" id="receivedText"></div>
+      <div class="row">
+        <button id="btnCopyRx">Copy</button>
+        <button id="btnShareRx">Share</button>
+        <button id="btnSaveRx" class="btn-primary">Save</button>
+        <button id="btnClearRx" class="btn-ghost">Clear</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="screen" id="screen-history">
+    <div class="note">History is kept for this browser session only (in-memory, not saved to disk). Use Export .txt from the Convert screen to keep a permanent copy.</div>
+    <div id="histList"></div>
+    <button class="btn-danger" style="width:100%; padding:11px;" id="btnDeleteAll">Delete all</button>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="screen" id="screen-settings">
+    <div class="card">
+      <div class="card-title">Speed &amp; Frequency</div>
+      <p style="font-size:13px; color:var(--text-dim); line-height:1.6; margin:0;">
+        Fixed at <b style="color:var(--text)">8 WPM</b> and <b style="color:var(--text)">600 Hz</b> for every device
+        running this app. Not adjustable — this guarantees Send and Receive always agree without any setup.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title">About</div>
+      <p style="font-size:13px; color:var(--text-dim); line-height:1.6; margin:0;">
+        Runs fully offline once loaded — no server, no accounts, no tracking. Works in any modern desktop or mobile browser.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<nav>
+  <button class="nav-btn active" data-target="convert">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.5,21L3,16.5L4.4,15.1L6.5,17.2V6h2v11.2l2.1,-2.1L12,16.5L7.5,21ZM16.5,21L12,16.5V21H16.5ZM16.5,3L21,7.5L19.6,8.9L17.5,6.8V18h-2V6.8l-2.1,2.1L12,7.5L16.5,3Z"/></svg>
+    Convert
+  </button>
+  <button class="nav-btn" data-target="send">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8,5v14l11,-7z"/></svg>
+    Send
+  </button>
+  <button class="nav-btn" data-target="receive">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9,2L7.17,4H4a2,2 0 0,0 -2,2v12a2,2 0 0,0 2,2h16a2,2 0 0,0 2,-2V6a2,2 0 0,0 -2,-2h-3.17L15,2H9zM12,17a5,5 0 1,1 0,-10 5,5 0 0,1 0,10z"/></svg>
+    Receive
+  </button>
+  <button class="nav-btn" data-target="history">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13,3a9,9 0 0,0 -9,9H1l4,4l4,-4H6a7,7 0 1,1 2,5.3l-1.4,1.5A9,9 0 1,0 13,3zM12,8v5l4.3,2.5l0.7,-1.2l-3.5,-2.1V8z"/></svg>
+    History
+  </button>
+  <button class="nav-btn" data-target="settings">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.4,13a7.6,7.6 0 0,0 0,-2l2.1,-1.6l-2,-3.5l-2.5,1a7.4,7.4 0 0,0 -1.7,-1L15,3h-4l-0.3,2.9a7.4,7.4 0 0,0 -1.7,1l-2.5,-1l-2,3.5L6.6,11a7.6,7.6 0 0,0 0,2l-2.1,1.6l2,3.5l2.5,-1a7.4,7.4 0 0,0 1.7,1L11,21h4l0.3,-2.9a7.4,7.4 0 0,0 1.7,-1l2.5,1l2,-3.5zM13,15.5A3.5,3.5 0 1,1 13,8.5a3.5,3.5 0 0,1 0,7z"/></svg>
+    Settings
+  </button>
+</nav>
 
 <script>
-const video = document.getElementById('video');
-const detectBox = document.getElementById('detectBox');
-const countdownOverlay = document.getElementById('countdownOverlay');
-const sizeHint = document.getElementById('sizeHint');
-const statusBadge = document.getElementById('statusBadge');
-const liveMorseEl = document.getElementById('liveMorse');
-const receivedTextEl = document.getElementById('receivedText');
-const accuracyScoreEl = document.getElementById('accuracyScore');
-
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d', {willReadFrequently:true});
-
-const UNIVERSAL_WPM = 8;
-const unitMs = 1200/UNIVERSAL_WPM;
-const MORSE_MAP = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.'};
+/* ============ MORSE ENGINE ============ */
+const MORSE_MAP = {
+  A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',
+  K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',
+  U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+  '0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....',
+  '6':'-....','7':'--...','8':'---..','9':'----.',
+  '.':'.-.-.-',',':'--..--','?':'..--..',"'":'.----.','!':'-.-.--','/':'-..-.',
+  '(':'-.--.',')':'-.--.-','&':'.-...',':':'---...',';':'-.-.-.','=':'-...-',
+  '+':'.-.-.','-':'-....-','_':'..--.-','"':'.-..-.','$':'...-..-','@':'.--.-.'
+};
 const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k,v])=>[v,k]));
 
-let camStream = null, camRaf = null;
-let decodedText = '';
-let runningMin = 255, runningMax = 0;
-let currentLetter = '';
-const CALIBRATION_DECAY = 0.98;
-
-// --- Feature 1: warm-up / countdown lock-on ---
-let scanningEnabled = false;
-let lockState = 'searching'; // 'searching' | 'locked' | 'paused'
-
-// --- Feature 2: multi-frame confirmation (debounce) ---
-let pendingState = null, pendingCount = 0;
-let confirmedState = false;
-const CONFIRM_FRAMES = 2; // require N consecutive frames to agree before flipping
-
-// --- Feature 4: auto-pause on signal loss ---
-let lastSignalSeenMs = 0;
-const SIGNAL_LOSS_TIMEOUT_MS = unitMs * 10; // no light at all for 10 units -> pause, don't treat as word gap
-
-// --- Feature 5: accuracy score ---
-let letterCount = 0, confidentCount = 0;
-
-let stateStartMs = -1, isOn = false;
-
-function unitEstimateMs(){ return unitMs; }
-
-async function startCamera(){
-  try{
-    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject = camStream;
-
-    // Feature: try to lock exposure so auto-exposure hunting doesn't skew brightness readings
-    const track = camStream.getVideoTracks()[0];
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    if(caps.exposureMode && caps.exposureMode.includes('manual')){
-      try{ await track.applyConstraints({advanced:[{exposureMode:'manual'}]}); }catch(e){}
+function encode(text){
+  if(!text) return '';
+  const words = text.trim().toUpperCase().split(/\s+/);
+  const out = [];
+  for(const word of words){
+    const letters = [];
+    for(const ch of word){
+      if(MORSE_MAP[ch]) letters.push(MORSE_MAP[ch]);
     }
+    if(letters.length) out.push(letters.join(' '));
+  }
+  return out.join(' / ');
+}
 
-    runCountdown();
-    analyzeFrame();
-  }catch(e){
-    alert('Camera access denied or unavailable.');
+function decode(morse){
+  if(!morse) return '';
+  const words = morse.trim().replace(/\s*\/\s*/g,' / ').split(' / ');
+  const out = [];
+  for(const word of words){
+    let str = '';
+    for(const letter of word.trim().split(/\s+/)){
+      if(REVERSE_MAP[letter]) str += REVERSE_MAP[letter];
+    }
+    out.push(str);
+  }
+  return out.join(' ');
+}
+
+/* ============ TIMING (PARIS standard) ============ */
+function unitMs(wpm){ return 1200 / Math.max(1,wpm); }
+function dotMs(wpm){ return unitMs(wpm); }
+function dashMs(wpm){ return unitMs(wpm) * 3; }
+function intraGapMs(wpm){ return unitMs(wpm); }
+function letterGapMs(wpm){ return unitMs(wpm) * 3; }
+function wordGapMs(wpm){ return unitMs(wpm) * 7; }
+
+function buildEvents(morse, wpm){
+  const events = [];
+  const words = morse.trim().replace(/\s*\/\s*/g,' / ').split(' / ').filter(w=>w.length);
+  words.forEach((word,wi)=>{
+    const letters = word.trim().split(/\s+/);
+    letters.forEach((letter,li)=>{
+      for(let i=0;i<letter.length;i++){
+        const sym = letter[i];
+        events.push([true, sym==='-'?dashMs(wpm):dotMs(wpm)]);
+        if(i<letter.length-1) events.push([false, intraGapMs(wpm)]);
+      }
+      if(li<letters.length-1) events.push([false, letterGapMs(wpm)]);
+    });
+    if(wi<words.length-1) events.push([false, wordGapMs(wpm)]);
+  });
+  return events;
+}
+
+function estimateDuration(morse, wpm){
+  return buildEvents(morse, wpm).reduce((sum,e)=>sum+e[1],0);
+}
+
+function formatMs(ms){
+  const s = Math.round(ms/1000);
+  const m = Math.floor(s/60);
+  const sec = s % 60;
+  return m>0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+/* ============ NAVIGATION ============ */
+const screens = document.querySelectorAll('.screen');
+const navBtns = document.querySelectorAll('.nav-btn');
+navBtns.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const target = btn.dataset.target;
+    screens.forEach(s=>s.classList.toggle('active', s.id === 'screen-'+target));
+    navBtns.forEach(b=>b.classList.toggle('active', b===btn));
+    if(target === 'receive') startCamera(); else stopCamera();
+    if(target !== 'send' && toggleTorch && toggleTorch.checked){
+      // Don't leave the flashlight camera stream open in the background once you
+      // leave the Send screen — releases the hardware and the camera indicator light.
+      toggleTorch.checked = false;
+      disableTorch();
+      torchStatus.textContent = '';
+    }
+  });
+});
+document.getElementById('goSend').addEventListener('click', ()=>{
+  document.getElementById('sendText').value = document.getElementById('inputText').value || 'Hello World';
+  navBtns[1].click();
+});
+document.getElementById('goReceive').addEventListener('click', ()=> navBtns[2].click());
+
+/* ============ CONVERT SCREEN ============ */
+const inputText = document.getElementById('inputText');
+const outputMorse = document.getElementById('outputMorse');
+let textIsSource = true;
+inputText.addEventListener('focus', ()=> textIsSource = true);
+outputMorse.addEventListener('focus', ()=> textIsSource = false);
+
+document.getElementById('btnSwap').addEventListener('click', ()=>{
+  if(textIsSource){ outputMorse.value = encode(inputText.value); }
+  else { inputText.value = decode(outputMorse.value); }
+  textIsSource = !textIsSource;
+});
+document.getElementById('btnClearText').addEventListener('click', ()=>{
+  inputText.value=''; outputMorse.value='';
+});
+document.getElementById('btnPaste').addEventListener('click', async ()=>{
+  try{ inputText.value = await navigator.clipboard.readText(); }catch(e){ alert('Clipboard access denied by browser.'); }
+});
+document.getElementById('btnCopy').addEventListener('click', ()=>{
+  if(!outputMorse.value) return;
+  navigator.clipboard.writeText(outputMorse.value);
+  toast('Copied');
+});
+document.getElementById('btnShare').addEventListener('click', async ()=>{
+  if(!outputMorse.value) return;
+  if(navigator.share){ try{ await navigator.share({text:outputMorse.value}); }catch(e){} }
+  else { navigator.clipboard.writeText(outputMorse.value); toast('Share not supported — copied instead'); }
+});
+document.getElementById('btnDownload').addEventListener('click', ()=>{
+  downloadTxt(outputMorse.value || '', 'morse-code.txt');
+});
+document.getElementById('btnSaveHist').addEventListener('click', ()=>{
+  if(!inputText.value && !outputMorse.value) return;
+  saveHistory(inputText.value, outputMorse.value);
+  toast('Saved to history');
+});
+
+function downloadTxt(content, filename){
+  const blob = new Blob([content], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+let toastTimer;
+function toast(msg){
+  let el = document.getElementById('toastEl');
+  if(!el){
+    el = document.createElement('div');
+    el.id='toastEl';
+    el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#232E37;color:#EAF0F3;padding:9px 16px;border-radius:20px;font-size:13px;z-index:1000;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:1px solid #2A353F;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity='1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.style.opacity='0', 1600);
+}
+
+/* ============ SEND SCREEN ============ */
+// Universal fixed speed/frequency — same constants used by Receive below, so any
+// two devices running this app always agree without the user setting anything.
+const UNIVERSAL_WPM = 8;
+const UNIVERSAL_FREQ_HZ = 600;
+
+const sendText = document.getElementById('sendText');
+const estimate = document.getElementById('estimate');
+const progressBar = document.getElementById('progressBar');
+const headerLamp = document.getElementById('headerLamp');
+const flashOverlay = document.getElementById('flashOverlay');
+const toggleTorch = document.getElementById('toggleTorch');
+const torchStatus = document.getElementById('torchStatus');
+const btnPlay = document.getElementById('btnPlay');
+const btnStop = document.getElementById('btnStop');
+
+function updateEstimate(){
+  const morse = encode(sendText.value);
+  estimate.textContent = 'Estimated time: ' + formatMs(estimateDuration(morse, UNIVERSAL_WPM));
+}
+sendText.addEventListener('input', updateEstimate);
+updateEstimate();
+
+
+let audioCtx;
+let transmitTimer = null;
+let transmitting = false;
+let wakeLock = null;
+let torchTrack = null;
+
+async function requestWakeLock(){
+  try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){ /* not fatal */ }
+}
+function releaseWakeLock(){
+  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
+}
+
+/* --- Real flashlight (torch) support, feature-detected --- */
+async function enableTorch(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(!caps.torch){ track.stop(); return false; }
+    torchTrack = track;
+    return true;
+  }catch(e){ return false; }
+}
+function disableTorch(){
+  if(torchTrack){
+    torchTrack.applyConstraints({advanced:[{torch:false}]}).catch(()=>{});
+    torchTrack.stop();
+    torchTrack = null;
+  }
+}
+function setTorch(on){
+  if(!torchTrack) return;
+  torchTrack.applyConstraints({advanced:[{torch:on}]}).catch(()=>{});
+}
+toggleTorch.addEventListener('change', async ()=>{
+  if(toggleTorch.checked){
+    toggleTorch.disabled = true;
+    torchStatus.textContent = 'Requesting camera flash access…';
+    const ok = await enableTorch();
+    toggleTorch.disabled = false;
+    if(!ok){
+      toggleTorch.checked = false;
+      torchStatus.textContent = 'Real flashlight isn\u2019t supported on this device/browser (needs Android Chrome). Screen Flash will be used instead.';
+      document.getElementById('toggleFlash').checked = true;
+    } else {
+      torchStatus.textContent = 'Real flashlight connected.';
+    }
+  } else {
+    disableTorch();
+    torchStatus.textContent = '';
+  }
+});
+
+/* --- Lamp / flash / torch visual output for one symbol state --- */
+function lampState(on){
+  headerLamp.classList.toggle('on', on);
+  if(document.getElementById('toggleFlash').checked){
+    flashOverlay.style.opacity = on ? '1' : '0';
+  }
+  if(toggleTorch.checked && torchTrack){
+    setTorch(on);
   }
 }
 
-// --- Feature 1: countdown before scanning begins ---
+function beep(freqHz, durationMs){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = freqHz;
+    osc.type = 'sine';
+    // quick attack/release avoids audible clicks between symbols
+    const t0 = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.35, t0 + 0.004);
+    gain.gain.setValueAtTime(0.35, t0 + Math.max(0.004, durationMs/1000 - 0.004));
+    gain.gain.linearRampToValueAtTime(0, t0 + durationMs/1000);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + durationMs/1000 + 0.005);
+  }catch(e){
+    // Web Audio unsupported/blocked — fail silently so light/vibrate/timing still work
+    // instead of throwing and stalling the whole scheduler.
+  }
+}
+
+/* --- Morse -> token list, independent of WPM so speed can change live --- */
+function morseToTokens(morse){
+  const tokens = [];
+  const words = morse.trim().replace(/\s*\/\s*/g,' / ').split(' / ').filter(w=>w.length);
+  words.forEach((word,wi)=>{
+    const letters = word.trim().split(/\s+/);
+    letters.forEach((letter,li)=>{
+      for(let i=0;i<letter.length;i++){
+        tokens.push({on:true, sym:letter[i]});
+        if(i<letter.length-1) tokens.push({on:false, kind:'intra'});
+      }
+      if(li<letters.length-1) tokens.push({on:false, kind:'letter'});
+    });
+    if(wi<words.length-1) tokens.push({on:false, kind:'word'});
+  });
+  return tokens;
+}
+function tokenDuration(token, wpm){
+  if(token.on) return token.sym === '-' ? dashMs(wpm) : dotMs(wpm);
+  if(token.kind === 'intra') return intraGapMs(wpm);
+  if(token.kind === 'letter') return letterGapMs(wpm);
+  return wordGapMs(wpm);
+}
+
+/* --- Drift-corrected scheduler: tracks an absolute "next fire" time so accumulated
+   setTimeout overhead doesn't slowly desync audio/light/vibration on long messages --- */
+let nextFireTime = 0;
+function scheduleNext(fn, delayMs){
+  nextFireTime += delayMs;
+  const wait = Math.max(0, nextFireTime - performance.now());
+  transmitTimer = setTimeout(fn, wait);
+}
+
+let onCount = 0, totalOn = 1;
+function playTokens(tokens, idx, loop){
+  if(!transmitting){ lampState(false); return; }
+  if(idx >= tokens.length){
+    lampState(false);
+    progressBar.value = 100;
+    if(loop && transmitting){
+      onCount = 0;
+      nextFireTime = performance.now();
+      scheduleNext(()=> playTokens(tokens, 0, true), 500);
+    } else {
+      transmitting = false;
+      btnPlay.disabled = false;
+      releaseWakeLock();
+    }
+    return;
+  }
+  const wpm = UNIVERSAL_WPM;
+  const freq = UNIVERSAL_FREQ_HZ;
+  const token = tokens[idx];
+  const dur = tokenDuration(token, wpm);
+
+  lampState(token.on);
+  if(token.on && document.getElementById('toggleAudio').checked) beep(freq, dur);
+  if(token.on && document.getElementById('toggleVibrate').checked && navigator.vibrate){
+    navigator.vibrate(dur); // triggered per-symbol so it tracks live speed changes, same as audio/light
+  }
+  if(token.on){
+    onCount++;
+    progressBar.value = Math.round((onCount/totalOn)*100);
+  }
+  scheduleNext(()=> playTokens(tokens, idx+1, loop), dur);
+}
+
+btnPlay.addEventListener('click', async ()=>{
+  if(transmitting) return;
+  const morse = encode(sendText.value);
+  if(!morse) return;
+  transmitting = true;
+  btnPlay.disabled = true;
+  await requestWakeLock();
+
+  const tokens = morseToTokens(morse);
+  totalOn = tokens.filter(t=>t.on).length || 1;
+  onCount = 0;
+  progressBar.value = 0;
+
+  nextFireTime = performance.now();
+  playTokens(tokens, 0, document.getElementById('toggleLoop').checked);
+});
+
+btnStop.addEventListener('click', ()=>{
+  transmitting = false;
+  btnPlay.disabled = false;
+  clearTimeout(transmitTimer);
+  lampState(false);
+  progressBar.value = 0;
+  if(navigator.vibrate) navigator.vibrate(0);
+  releaseWakeLock();
+});
+
+/* ============ RECEIVE SCREEN (camera light-pulse decoder) ============ */
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+const detectBox = document.getElementById('detectBox');
+const liveMorseEl = document.getElementById('liveMorse');
+const receivedTextEl = document.getElementById('receivedText');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const sizeHint = document.getElementById('sizeHint');
+const statusBadge = document.getElementById('statusBadge');
+const accuracyScoreEl = document.getElementById('accuracyScore');
+
+let camStream = null;
+let camRaf = null;
+let decodedText = '';
+
+// Decoder state. Unit length (dot duration) is FIXED to the same UNIVERSAL_WPM
+// used by Send — no guessing, no per-device setting, so any two devices running
+// this app always agree. Only the brightness threshold auto-calibrates, since
+// that's about the room's lighting, not about timing.
+let runningMin = 255, runningMax = 0;
+let isOn = false, stateStartMs = -1;
+let currentLetter = '';
+const CALIBRATION_DECAY = 0.98;
+
+/* ===== Lock-On Mode: countdown, multi-frame confirm, auto-pause, accuracy ===== */
+let scanningEnabled = false;
+let lockState = 'searching'; // 'searching' | 'locked' | 'paused'
+let pendingState = null, pendingCount = 0, confirmedState = false;
+const CONFIRM_FRAMES = 2; // consecutive frames that must agree before a state flip is accepted
+let lastSignalSeenMs = 0;
+let letterCount = 0, confidentCount = 0;
+
+function unitEstimateMs(){ return 1200 / UNIVERSAL_WPM; }
+const SIGNAL_LOSS_TIMEOUT_MS = () => unitEstimateMs() * 10;
+
 function runCountdown(){
   let n = 3;
   countdownOverlay.textContent = n;
   countdownOverlay.classList.remove('hidden');
+  scanningEnabled = false;
   const iv = setInterval(()=>{
     n--;
     if(n > 0){ countdownOverlay.textContent = n; }
@@ -171,35 +820,31 @@ function setLockState(state){
   statusBadge.textContent = state === 'searching' ? 'Searching…' : state === 'locked' ? 'Locked' : 'Paused';
 }
 
-function analyzeFrame(){
-  if(video.readyState === video.HAVE_ENOUGH_DATA){
-    const w = 96, h = 64;
-    canvas.width = w; canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-    const cw = w*0.16, ch = h*0.16;
-    const x0 = Math.floor((w-cw)/2), y0 = Math.floor((h-ch)/2);
-    const frame = ctx.getImageData(x0, y0, Math.floor(cw), Math.floor(ch));
-    let sum = 0;
-    for(let i=0;i<frame.data.length;i+=4) sum += 0.299*frame.data[i]+0.587*frame.data[i+1]+0.114*frame.data[i+2];
-    const avg = sum/(frame.data.length/4);
+function updateAccuracy(){
+  accuracyScoreEl.textContent = letterCount === 0 ? '—' : Math.round(confidentCount/letterCount*100) + '%';
+}
+/* ===== end Lock-On Mode setup ===== */
 
-    // --- Feature 3: distance hint via contrast strength ---
-    const contrast = runningMax - runningMin;
-    sizeHint.classList.toggle('show', scanningEnabled && contrast > 0 && contrast < 15);
-
-    if(scanningEnabled) onBrightnessSample(avg, performance.now());
-  }
-  camRaf = requestAnimationFrame(analyzeFrame);
+function resetDecoder(){
+  runningMin=255; runningMax=0; isOn=false; stateStartMs=-1; currentLetter='';
+  smoothedBrightness = null;
+  pendingState=null; pendingCount=0; confirmedState=false;
+  letterCount=0; confidentCount=0;
+  lockState = 'searching';
+  liveMorseEl.textContent = '\u00A0';
+  updateAccuracy();
 }
 
 function onBrightnessSample(brightness, t){
   runningMax = Math.max(brightness, runningMax*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
   runningMin = Math.min(brightness, runningMin*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
-  const threshold = runningMin + (runningMax-runningMin)*0.5;
+  const sensitivity = 0.5; // fixed — was user-adjustable, now auto (adaptive threshold handles lighting)
+  const threshold = runningMin + (runningMax-runningMin)*sensitivity;
   const contrast = runningMax - runningMin;
-  const rawOn = brightness >= threshold && contrast > 8;
+  const rawOn = brightness >= threshold && contrast > 3;
 
-  // --- Feature 2: multi-frame confirmation before accepting a state flip ---
+  // Multi-frame confirmation: require CONFIRM_FRAMES consecutive frames to agree
+  // before accepting a state flip, so a single noisy frame can't register as a pulse.
   if(rawOn === confirmedState){
     pendingCount = 0; pendingState = null;
   } else {
@@ -209,9 +854,13 @@ function onBrightnessSample(brightness, t){
   const lightOn = confirmedState;
   detectBox.classList.toggle('show', lightOn);
 
-  // --- Feature 4: auto-pause if no signal at all for too long ---
-  if(contrast > 8) lastSignalSeenMs = t;
-  if(t - lastSignalSeenMs > SIGNAL_LOSS_TIMEOUT_MS){
+  // Distance hint: low contrast usually means the light is too far/small in frame
+  sizeHint.classList.toggle("show", contrast > 0 && contrast < 8);
+
+  // Auto-pause: if there's been no signal at all for a while, pause instead of
+  // silently misreading the gap as a word break.
+  if(contrast > 3) lastSignalSeenMs = t;
+  if(t - lastSignalSeenMs > SIGNAL_LOSS_TIMEOUT_MS()){
     setLockState('paused');
   } else {
     setLockState(currentLetter || decodedText ? 'locked' : 'searching');
@@ -231,14 +880,14 @@ function handleTransition(wasOn, duration){
   if(wasOn){
     if(duration < 20) return;
     const units = duration/unit;
-    // --- Feature 5: flag borderline dot/dash timing as uncertain ---
-    const borderline = Math.abs(units - 2) < 0.4; // near the dot/dash boundary
+    // Flag borderline dot/dash timing as uncertain instead of silently guessing
+    const borderline = Math.abs(units - 2) < 0.4;
     const symbol = units >= 2 ? '-' : '.';
     currentLetter += symbol;
     letterCount++;
     if(!borderline) confidentCount++;
-    liveMorseEl.textContent = currentLetter + (borderline ? ' (uncertain)' : '');
     updateAccuracy();
+    liveMorseEl.textContent = currentLetter + (borderline ? ' (uncertain)' : '');
   } else {
     if(duration < 20) return;
     const units = duration/unit;
@@ -258,12 +907,141 @@ function flushLetter(){
 
 function renderReceived(){ receivedTextEl.innerHTML = decodedText; }
 
-function updateAccuracy(){
-  if(letterCount === 0){ accuracyScoreEl.textContent = '—'; return; }
-  accuracyScoreEl.textContent = Math.round(confidentCount/letterCount*100) + '%';
+async function startCamera(){
+  if(camStream) return;
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = camStream;
+
+    // Try to lock exposure so auto-exposure hunting doesn't skew brightness readings
+    // when the light source suddenly appears. Best-effort — most browsers/devices
+    // don't expose this, so it silently no-ops where unsupported.
+    const track = camStream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.exposureMode && caps.exposureMode.includes('manual')){
+      try{ await track.applyConstraints({advanced:[{exposureMode:'manual'}]}); }catch(e){}
+    }
+    // Zoom in where supported — helps a lot with distant/small light sources
+    if(caps.zoom){
+      try{ await track.applyConstraints({advanced:[{zoom: Math.min(caps.zoom.max, (caps.zoom.max||1)*0.6)}]}); }catch(e){}
+    }
+
+    resetDecoder();
+    runCountdown();
+    analyzeFrame();
+  }catch(e){
+    document.getElementById('videoWrap').innerHTML = '<div class="cam-msg">Camera access denied or unavailable.<br>Grant camera permission to receive Morse code.</div>';
+  }
 }
 
-document.getElementById('btnStart').addEventListener('click', startCamera);
+function stopCamera(){
+  if(camRaf) cancelAnimationFrame(camRaf);
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+}
+
+// Fixed sampling region: always the box in the center of the frame (matches the
+// visual #detectBox target). No auto-tracking/auto-focus hunting — the user aims
+// the camera so the light sits in the box, which is simpler and more predictable
+// than a moving detector, especially one-handed.
+const CENTER_FRACTION = 0.1; // tighter crop — a distant light source is a small point; a wider crop dilutes it with dark background
+
+// Light-weight exponential smoothing so single noisy camera frames don't register
+// as spurious transitions; not a full moving-average buffer, so it stays real-time.
+let smoothedBrightness = null;
+const SMOOTHING = 0.45; // 0 = no smoothing, 1 = frozen
+
+function analyzeFrame(){
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    const w = 96, h = 64; // small sample size = fast
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const cw = w * CENTER_FRACTION, ch = h * CENTER_FRACTION;
+    const x0 = Math.floor((w-cw)/2), y0 = Math.floor((h-ch)/2);
+    const frame = ctx.getImageData(x0, y0, Math.floor(cw), Math.floor(ch));
+
+    let sum = 0;
+    for(let i=0; i<frame.data.length; i+=4){
+      sum += 0.299*frame.data[i] + 0.587*frame.data[i+1] + 0.114*frame.data[i+2];
+    }
+    const avg = sum / (frame.data.length/4);
+
+    smoothedBrightness = smoothedBrightness === null
+      ? avg
+      : smoothedBrightness*SMOOTHING + avg*(1-SMOOTHING);
+
+    if(scanningEnabled) onBrightnessSample(smoothedBrightness, performance.now());
+  }
+  camRaf = requestAnimationFrame(analyzeFrame);
+}
+
+document.getElementById('btnCopyRx').addEventListener('click', ()=>{
+  if(!decodedText) return;
+  navigator.clipboard.writeText(decodedText); toast('Copied');
+});
+document.getElementById('btnShareRx').addEventListener('click', async ()=>{
+  if(!decodedText) return;
+  if(navigator.share){ try{ await navigator.share({text:decodedText}); }catch(e){} }
+  else { navigator.clipboard.writeText(decodedText); toast('Share not supported — copied instead'); }
+});
+document.getElementById('btnSaveRx').addEventListener('click', ()=>{
+  if(!decodedText) return;
+  saveHistory(decodedText, '');
+  toast('Saved to history');
+});
+document.getElementById('btnClearRx').addEventListener('click', ()=>{
+  decodedText=''; renderReceived(); resetDecoder();
+});
+
+/* ============ HISTORY (in-memory for this session) ============ */
+let history = [];
+const histList = document.getElementById('histList');
+
+function saveHistory(text, morse){
+  history.unshift({id:Date.now(), text, morse, time:new Date(), fav:false});
+  renderHistory();
+}
+function renderHistory(){
+  if(!history.length){
+    histList.innerHTML = '<div class="empty-note">No history yet — conversions you save will appear here for this session.</div>';
+    return;
+  }
+  histList.innerHTML = history.map(h=>`
+    <div class="hist-item" data-id="${h.id}">
+      <div style="flex:1; min-width:0;">
+        <div class="hist-text">${escapeHtml(h.text || '(morse only)')}</div>
+        <div class="hist-morse">${escapeHtml(h.morse || '')}</div>
+        <div class="hist-time">${h.time.toLocaleString()}</div>
+      </div>
+      <div class="hist-actions">
+        <button class="icon-btn fav-btn">${h.fav ? '★' : '☆'}</button>
+        <button class="icon-btn del-btn">🗑</button>
+      </div>
+    </div>`).join('');
+
+  histList.querySelectorAll('.hist-item').forEach(el=>{
+    const id = +el.dataset.id;
+    el.querySelector('.fav-btn').addEventListener('click', ()=>{
+      const item = history.find(h=>h.id===id); item.fav = !item.fav; renderHistory();
+    });
+    el.querySelector('.del-btn').addEventListener('click', ()=>{
+      history = history.filter(h=>h.id!==id); renderHistory();
+    });
+  });
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+document.getElementById('btnDeleteAll').addEventListener('click', ()=>{
+  if(confirm('Delete all history for this session?')){ history=[]; renderHistory(); }
+});
+renderHistory();
+
+/* ============ CLEANUP ON TAB CLOSE/REFRESH ============ */
+window.addEventListener('pagehide', ()=>{
+  stopCamera();
+  disableTorch();
+  releaseWakeLock();
+  if(navigator.vibrate) navigator.vibrate(0);
+});
 </script>
 </body>
 </html>
