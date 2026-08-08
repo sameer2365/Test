@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morse Receive — Reliability Demo</title>
+<style>
+  :root{
+    --bg:#10151A; --panel:#171F26; --panel-2:#1D262E; --line:#2A353F;
+    --amber:#FFB74D; --amber-dim:#8A6428; --teal:#35D6B8; --danger:#FF6B6B; --text:#EAF0F3; --text-dim:#8CA0AC;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; padding:16px;}
+  h1{font-size:18px; margin:0 0 4px;}
+  p.sub{color:var(--text-dim); font-size:12.5px; margin:0 0 16px;}
+  #videoWrap{position:relative; border-radius:14px; overflow:hidden; background:#000; aspect-ratio:4/3; max-width:420px; margin:0 auto;}
+  video{width:100%; height:100%; object-fit:cover; display:block;}
+  #detectBox{
+    position:absolute; width:34px; height:34px; border:2px solid var(--amber-dim); border-radius:50%;
+    top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6;
+  }
+  #detectBox.show{opacity:1; border-color:var(--danger);}
+  #detectBox::after{content:"+"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--amber-dim); font-size:14px;}
+  #detectBox.show::after{color:var(--danger);}
+
+  #countdownOverlay{
+    position:absolute; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center;
+    font-size:48px; font-weight:700; color:var(--amber);
+  }
+  #countdownOverlay.hidden{display:none;}
+
+  #sizeHint{
+    position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:12px;
+    color:var(--amber); background:rgba(0,0,0,0.5); padding:4px; display:none;
+  }
+  #sizeHint.show{display:block;}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px; max-width:420px; margin-left:auto; margin-right:auto;}
+  .row{display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .status-badge{font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600;}
+  .badge-searching{background:var(--panel-2); color:var(--text-dim);}
+  .badge-locked{background:var(--teal); color:#06231D;}
+  .badge-paused{background:var(--danger); color:#3A0A0A;}
+
+  #liveMorse{font-family:monospace; color:var(--teal); font-size:15px; min-height:20px;}
+  #receivedText{background:var(--panel-2); border-radius:10px; padding:10px; min-height:50px; font-size:14px; white-space:pre-wrap;}
+  .uncertain{color:var(--danger); text-decoration:underline wavy;}
+  button{width:100%; padding:11px; border-radius:10px; border:none; background:var(--amber); color:#3A2600; font-weight:600; font-size:14px; margin-top:14px; cursor:pointer;}
+  #accuracyScore{font-size:22px; font-weight:700; color:var(--teal); text-align:center; margin-top:4px;}
+</style>
+</head>
+<body>
+
+<h1>Receive — Reliability Demo</h1>
+<p class="sub">Testing: countdown lock-on · multi-frame confirm · distance hint · auto-pause on signal loss · accuracy score</p>
+
+<div id="videoWrap">
+  <video id="video" playsinline autoplay muted></video>
+  <div id="detectBox"></div>
+  <div id="countdownOverlay">3</div>
+  <div id="sizeHint">Move closer</div>
+</div>
+
+<div class="card">
+  <div class="row"><span>Status</span><span class="status-badge badge-searching" id="statusBadge">Searching…</span></div>
+  <div class="row"><span>Live Morse</span></div>
+  <div id="liveMorse">&nbsp;</div>
+</div>
+
+<div class="card">
+  <div class="row"><span>Received Text</span></div>
+  <div id="receivedText"></div>
+</div>
+
+<div class="card">
+  <div class="row"><span>Session Accuracy</span></div>
+  <div id="accuracyScore">—</div>
+  <div style="font-size:11px; color:var(--text-dim); text-align:center; margin-top:4px;">% of letters decoded with confident (non-borderline) timing</div>
+</div>
+
+<button id="btnStart">Start Camera</button>
+
+<script>
+const video = document.getElementById('video');
+const detectBox = document.getElementById('detectBox');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const sizeHint = document.getElementById('sizeHint');
+const statusBadge = document.getElementById('statusBadge');
+const liveMorseEl = document.getElementById('liveMorse');
+const receivedTextEl = document.getElementById('receivedText');
+const accuracyScoreEl = document.getElementById('accuracyScore');
+
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+
+const UNIVERSAL_WPM = 8;
+const unitMs = 1200/UNIVERSAL_WPM;
+const MORSE_MAP = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.'};
+const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k,v])=>[v,k]));
+
+let camStream = null, camRaf = null;
+let decodedText = '';
+let runningMin = 255, runningMax = 0;
+let currentLetter = '';
+const CALIBRATION_DECAY = 0.98;
+
+// --- Feature 1: warm-up / countdown lock-on ---
+let scanningEnabled = false;
+let lockState = 'searching'; // 'searching' | 'locked' | 'paused'
+
+// --- Feature 2: multi-frame confirmation (debounce) ---
+let pendingState = null, pendingCount = 0;
+let confirmedState = false;
+const CONFIRM_FRAMES = 2; // require N consecutive frames to agree before flipping
+
+// --- Feature 4: auto-pause on signal loss ---
+let lastSignalSeenMs = 0;
+const SIGNAL_LOSS_TIMEOUT_MS = unitMs * 10; // no light at all for 10 units -> pause, don't treat as word gap
+
+// --- Feature 5: accuracy score ---
+let letterCount = 0, confidentCount = 0;
+
+let stateStartMs = -1, isOn = false;
+
+function unitEstimateMs(){ return unitMs; }
+
+async function startCamera(){
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = camStream;
+
+    // Feature: try to lock exposure so auto-exposure hunting doesn't skew brightness readings
+    const track = camStream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.exposureMode && caps.exposureMode.includes('manual')){
+      try{ await track.applyConstraints({advanced:[{exposureMode:'manual'}]}); }catch(e){}
+    }
+
+    runCountdown();
+    analyzeFrame();
+  }catch(e){
+    alert('Camera access denied or unavailable.');
+  }
+}
+
+// --- Feature 1: countdown before scanning begins ---
+function runCountdown(){
+  let n = 3;
+  countdownOverlay.textContent = n;
+  countdownOverlay.classList.remove('hidden');
+  const iv = setInterval(()=>{
+    n--;
+    if(n > 0){ countdownOverlay.textContent = n; }
+    else{
+      countdownOverlay.textContent = 'Ready';
+      setTimeout(()=>{
+        countdownOverlay.classList.add('hidden');
+        scanningEnabled = true;
+        lastSignalSeenMs = performance.now();
+      }, 500);
+      clearInterval(iv);
+    }
+  }, 700);
+}
+
+function setLockState(state){
+  if(lockState === state) return;
+  lockState = state;
+  statusBadge.className = 'status-badge badge-' + state;
+  statusBadge.textContent = state === 'searching' ? 'Searching…' : state === 'locked' ? 'Locked' : 'Paused';
+}
+
+function analyzeFrame(){
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    const w = 96, h = 64;
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    const cw = w*0.16, ch = h*0.16;
+    const x0 = Math.floor((w-cw)/2), y0 = Math.floor((h-ch)/2);
+    const frame = ctx.getImageData(x0, y0, Math.floor(cw), Math.floor(ch));
+    let sum = 0;
+    for(let i=0;i<frame.data.length;i+=4) sum += 0.299*frame.data[i]+0.587*frame.data[i+1]+0.114*frame.data[i+2];
+    const avg = sum/(frame.data.length/4);
+
+    // --- Feature 3: distance hint via contrast strength ---
+    const contrast = runningMax - runningMin;
+    sizeHint.classList.toggle('show', scanningEnabled && contrast > 0 && contrast < 15);
+
+    if(scanningEnabled) onBrightnessSample(avg, performance.now());
+  }
+  camRaf = requestAnimationFrame(analyzeFrame);
+}
+
+function onBrightnessSample(brightness, t){
+  runningMax = Math.max(brightness, runningMax*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
+  runningMin = Math.min(brightness, runningMin*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
+  const threshold = runningMin + (runningMax-runningMin)*0.5;
+  const contrast = runningMax - runningMin;
+  const rawOn = brightness >= threshold && contrast > 8;
+
+  // --- Feature 2: multi-frame confirmation before accepting a state flip ---
+  if(rawOn === confirmedState){
+    pendingCount = 0; pendingState = null;
+  } else {
+    if(pendingState === rawOn){ pendingCount++; } else { pendingState = rawOn; pendingCount = 1; }
+    if(pendingCount >= CONFIRM_FRAMES){ confirmedState = rawOn; pendingCount = 0; }
+  }
+  const lightOn = confirmedState;
+  detectBox.classList.toggle('show', lightOn);
+
+  // --- Feature 4: auto-pause if no signal at all for too long ---
+  if(contrast > 8) lastSignalSeenMs = t;
+  if(t - lastSignalSeenMs > SIGNAL_LOSS_TIMEOUT_MS){
+    setLockState('paused');
+  } else {
+    setLockState(currentLetter || decodedText ? 'locked' : 'searching');
+  }
+
+  if(stateStartMs < 0){ stateStartMs = t; isOn = lightOn; return; }
+  if(lightOn !== isOn){
+    const duration = t - stateStartMs;
+    handleTransition(isOn, duration);
+    isOn = lightOn;
+    stateStartMs = t;
+  }
+}
+
+function handleTransition(wasOn, duration){
+  const unit = unitEstimateMs();
+  if(wasOn){
+    if(duration < 20) return;
+    const units = duration/unit;
+    // --- Feature 5: flag borderline dot/dash timing as uncertain ---
+    const borderline = Math.abs(units - 2) < 0.4; // near the dot/dash boundary
+    const symbol = units >= 2 ? '-' : '.';
+    currentLetter += symbol;
+    letterCount++;
+    if(!borderline) confidentCount++;
+    liveMorseEl.textContent = currentLetter + (borderline ? ' (uncertain)' : '');
+    updateAccuracy();
+  } else {
+    if(duration < 20) return;
+    const units = duration/unit;
+    if(units >= 5){ flushLetter(); decodedText += ' '; renderReceived(); }
+    else if(units >= 2){ flushLetter(); }
+  }
+}
+
+function flushLetter(){
+  if(!currentLetter) return;
+  const decoded = REVERSE_MAP[currentLetter];
+  decodedText += decoded ? decoded : '<span class="uncertain">_</span>';
+  currentLetter = '';
+  liveMorseEl.textContent = '\u00A0';
+  renderReceived();
+}
+
+function renderReceived(){ receivedTextEl.innerHTML = decodedText; }
+
+function updateAccuracy(){
+  if(letterCount === 0){ accuracyScoreEl.textContent = '—'; return; }
+  accuracyScoreEl.textContent = Math.round(confidentCount/letterCount*100) + '%';
+}
+
+document.getElementById('btnStart').addEventListener('click', startCamera);
+</script>
+</body>
+</html>
