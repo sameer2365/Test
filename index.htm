@@ -3,114 +3,286 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Distance Sampling Demo</title>
+<title>Morse Receive — Full Test</title>
 <style>
-  :root{--bg:#10151A; --panel:#171F26; --line:#2A353F; --amber:#FFB74D; --teal:#35D6B8; --text:#EAF0F3; --text-dim:#8CA0AC;}
+  :root{
+    --bg:#10151A; --panel:#171F26; --panel-2:#1D262E; --line:#2A353F;
+    --amber:#FFB74D; --amber-dim:#8A6428; --teal:#35D6B8; --danger:#FF6B6B; --text:#EAF0F3; --text-dim:#8CA0AC;
+  }
   *{box-sizing:border-box;}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; padding:16px;}
-  h1{font-size:17px; margin:0 0 4px;}
-  p.sub{color:var(--text-dim); font-size:12.5px; margin:0 0 16px;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; padding:16px; padding-bottom:40px;}
+  h1{font-size:18px; margin:0 0 4px;}
+  p.sub{color:var(--text-dim); font-size:12.5px; margin:0 0 16px; line-height:1.5;}
   #videoWrap{position:relative; border-radius:14px; overflow:hidden; background:#000; aspect-ratio:4/3; max-width:420px; margin:0 auto;}
   video{width:100%; height:100%; object-fit:cover; display:block;}
-  #box{position:absolute; width:34px; height:34px; border:2px solid var(--amber); border-radius:50%; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6;}
+  #detectBox{
+    position:absolute; width:34px; height:34px; border:2px solid var(--amber-dim); border-radius:50%;
+    top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6;
+  }
+  #detectBox.show{opacity:1; border-color:var(--danger);}
+  #detectBox::after{content:"+"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--amber-dim); font-size:14px;}
+  #detectBox.show::after{color:var(--danger);}
+
+  #countdownOverlay{
+    position:absolute; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center;
+    font-size:48px; font-weight:700; color:var(--amber); z-index:5;
+  }
+  #countdownOverlay.hidden{display:none;}
+
+  #sizeHint{
+    position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:12px;
+    color:var(--amber); background:rgba(0,0,0,0.5); padding:4px; display:none;
+  }
+  #sizeHint.show{display:block;}
+
   .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px; max-width:420px; margin-left:auto; margin-right:auto;}
-  .row{display:flex; justify-content:space-between; font-size:14px; padding:8px 0; border-bottom:1px solid var(--line);}
+  .card-title{font-size:11px; text-transform:uppercase; letter-spacing:1.2px; color:var(--text-dim); margin:0 0 8px; font-weight:600;}
+  .row{display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-bottom:1px solid var(--line);}
   .row:last-child{border-bottom:none;}
-  .val{font-family:monospace; font-weight:700;}
-  .old .val{color:var(--text-dim);}
-  .new .val{color:var(--teal);}
-  #bar-old, #bar-new{height:10px; border-radius:5px; background:var(--line); margin-top:4px; overflow:hidden;}
-  #fill-old, #fill-new{height:100%; width:0%; transition:width 0.05s;}
-  #fill-old{background:var(--text-dim);}
-  #fill-new{background:var(--teal);}
-  button{width:100%; padding:11px; border-radius:10px; border:none; background:var(--amber); color:#3A2600; font-weight:600; font-size:14px; margin-top:14px;}
-  .note{font-size:12px; color:var(--text-dim); margin-top:10px; line-height:1.5;}
+  .status-badge{font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600;}
+  .badge-searching{background:var(--panel-2); color:var(--text-dim);}
+  .badge-locked{background:var(--teal); color:#06231D;}
+  .badge-paused{background:var(--danger); color:#3A0A0A;}
+
+  #liveMorse{font-family:monospace; color:var(--teal); font-size:15px; min-height:20px;}
+  #receivedText{background:var(--panel-2); border-radius:10px; padding:10px; min-height:50px; font-size:14px; white-space:pre-wrap;}
+  .uncertain{color:var(--danger); text-decoration:underline wavy;}
+  button{width:100%; padding:11px; border-radius:10px; border:none; background:var(--amber); color:#3A2600; font-weight:600; font-size:14px; margin-top:14px; cursor:pointer;}
+  #accuracyScore{font-size:22px; font-weight:700; color:var(--teal); text-align:center; margin-top:4px;}
+  .debug{font-family:monospace; font-size:11px; color:var(--text-dim); margin-top:6px;}
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:13px; padding:6px 0;}
 </style>
 </head>
 <body>
 
-<h1>Distance Sampling — Old vs New</h1>
-<p class="sub">Point at a blinking light from far away and compare peak brightness readings.</p>
+<h1>Receive — Full Test</h1>
+<p class="sub">Native-res crop-first sampling (no zoom, focus untouched) + Lock-On Mode: countdown, multi-frame confirm, distance hint, auto-pause, accuracy score.</p>
 
 <div id="videoWrap">
   <video id="video" playsinline autoplay muted></video>
-  <div id="box"></div>
+  <div id="detectBox"></div>
+  <div id="countdownOverlay" class="hidden">3</div>
+  <div id="sizeHint">Move closer</div>
 </div>
 
 <div class="card">
-  <div class="row old"><span>OLD: shrink full frame, then crop</span><span class="val" id="oldVal">0</span></div>
-  <div id="bar-old"><div id="fill-old"></div></div>
+  <div class="row"><span>Status</span><span class="status-badge badge-searching" id="statusBadge">Searching…</span></div>
+  <div class="row"><span>Live Morse</span></div>
+  <div id="liveMorse">&nbsp;</div>
+  <div class="debug" id="debugInfo">brightness: — · contrast: — · threshold: —</div>
+</div>
 
-  <div class="row new" style="margin-top:14px;"><span>NEW: crop native res, then shrink</span><span class="val" id="newVal">0</span></div>
-  <div id="bar-new"><div id="fill-new"></div></div>
+<div class="card">
+  <div class="card-title">Received Text</div>
+  <div id="receivedText"></div>
+</div>
 
-  <div class="note">Both read the same spot in the frame. With a distant/small light, NEW should swing higher (brighter peak, more contrast) than OLD — that extra contrast is what makes far-away detection actually work.</div>
+<div class="card">
+  <div class="card-title">Session Accuracy</div>
+  <div id="accuracyScore">—</div>
 </div>
 
 <button id="btnStart">Start Camera</button>
+<button id="btnClear" style="background:var(--panel-2); color:var(--text);">Clear &amp; Restart</button>
 
 <script>
 const video = document.getElementById('video');
-const oldCanvas = document.createElement('canvas');
-const newCanvas = document.createElement('canvas');
-const oldCtx = oldCanvas.getContext('2d', {willReadFrequently:true});
-const newCtx = newCanvas.getContext('2d', {willReadFrequently:true});
-const oldVal = document.getElementById('oldVal');
-const newVal = document.getElementById('newVal');
-const fillOld = document.getElementById('fill-old');
-const fillNew = document.getElementById('fill-new');
+const detectBox = document.getElementById('detectBox');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const sizeHint = document.getElementById('sizeHint');
+const statusBadge = document.getElementById('statusBadge');
+const liveMorseEl = document.getElementById('liveMorse');
+const receivedTextEl = document.getElementById('receivedText');
+const accuracyScoreEl = document.getElementById('accuracyScore');
+const debugInfo = document.getElementById('debugInfo');
 
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+
+const UNIVERSAL_WPM = 8;
+const unitMs = 1200/UNIVERSAL_WPM;
+const MORSE_MAP = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.'};
+const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k,v])=>[v,k]));
+
+// --- NEW sampling: crop from native camera resolution FIRST, then shrink just the crop.
+// (Old method shrunk the whole frame first, which blurred out small/distant light sources.)
 const CENTER_FRACTION = 0.1;
-
-function luma(data){
+function sampleBrightness(){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if(!vw || !vh) return null;
+  const cw = vw*CENTER_FRACTION, ch = vh*CENTER_FRACTION;
+  const sx = (vw-cw)/2, sy = (vh-ch)/2;
+  const dest = 48;
+  canvas.width = dest; canvas.height = dest;
+  ctx.drawImage(video, sx, sy, cw, ch, 0, 0, dest, dest);
+  const data = ctx.getImageData(0,0,dest,dest).data;
   let sum = 0;
   for(let i=0;i<data.length;i+=4) sum += 0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
   return sum/(data.length/4);
 }
 
-// OLD method: shrink the whole frame to 96x64 first, then crop the center 10%
-function sampleOld(){
-  const w=96, h=64;
-  oldCanvas.width=w; oldCanvas.height=h;
-  oldCtx.drawImage(video, 0, 0, w, h);
-  const cw=w*CENTER_FRACTION, ch=h*CENTER_FRACTION;
-  const x0=Math.floor((w-cw)/2), y0=Math.floor((h-ch)/2);
-  return luma(oldCtx.getImageData(x0,y0,Math.floor(cw),Math.floor(ch)).data);
-}
+let camStream = null, camRaf = null;
+let decodedText = '';
+let runningMin = 255, runningMax = 0;
+let currentLetter = '';
+const CALIBRATION_DECAY = 0.98;
+let smoothedBrightness = null;
+const SMOOTHING = 0.45;
 
-// NEW method: crop the center 10% directly from native camera resolution first, THEN shrink
-function sampleNew(){
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if(!vw || !vh) return 0;
-  const cw = vw*CENTER_FRACTION, ch = vh*CENTER_FRACTION;
-  const sx = (vw-cw)/2, sy = (vh-ch)/2;
-  const dest = 48;
-  newCanvas.width=dest; newCanvas.height=dest;
-  newCtx.drawImage(video, sx, sy, cw, ch, 0, 0, dest, dest);
-  return luma(newCtx.getImageData(0,0,dest,dest).data);
-}
+let scanningEnabled = false;
+let lockState = 'searching';
+let pendingState = null, pendingCount = 0, confirmedState = false;
+const CONFIRM_FRAMES = 2;
+let lastSignalSeenMs = 0;
+let letterCount = 0, confidentCount = 0;
+let stateStartMs = -1, isOn = false;
 
-let minOld=255, maxOld=0, minNew=255, maxNew=0;
+function unitEstimateMs(){ return unitMs; }
+const SIGNAL_LOSS_TIMEOUT_MS = () => unitEstimateMs() * 10;
 
-function loop(){
-  if(video.readyState === video.HAVE_ENOUGH_DATA){
-    const o = sampleOld();
-    const n = sampleNew();
-    minOld = Math.min(minOld, o*0.98 + minOld*0.02); maxOld = Math.max(maxOld, o*0.98+maxOld*0.02);
-    minNew = Math.min(minNew, n*0.98 + minNew*0.02); maxNew = Math.max(maxNew, n*0.98+maxNew*0.02);
+async function startCamera(){
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = camStream;
 
-    oldVal.textContent = o.toFixed(1) + '  (contrast ~' + (maxOld-minOld).toFixed(1) + ')';
-    newVal.textContent = n.toFixed(1) + '  (contrast ~' + (maxNew-minNew).toFixed(1) + ')';
-    fillOld.style.width = (o/255*100) + '%';
-    fillNew.style.width = (n/255*100) + '%';
+    const track = camStream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.exposureMode && caps.exposureMode.includes('manual')){
+      try{ await track.applyConstraints({advanced:[{exposureMode:'manual'}]}); }catch(e){}
+    }
+
+    resetAll();
+    runCountdown();
+    analyzeFrame();
+  }catch(e){
+    alert('Camera access denied or unavailable.');
   }
-  requestAnimationFrame(loop);
 }
 
-document.getElementById('btnStart').addEventListener('click', async ()=>{
-  const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-  video.srcObject = stream;
-  loop();
+function resetAll(){
+  runningMin=255; runningMax=0; isOn=false; stateStartMs=-1; currentLetter='';
+  smoothedBrightness = null;
+  pendingState=null; pendingCount=0; confirmedState=false;
+  letterCount=0; confidentCount=0;
+  lockState = 'searching';
+  decodedText = '';
+  liveMorseEl.textContent = '\u00A0';
+  receivedTextEl.innerHTML = '';
+  updateAccuracy();
+}
+
+function runCountdown(){
+  let n = 3;
+  countdownOverlay.textContent = n;
+  countdownOverlay.classList.remove('hidden');
+  scanningEnabled = false;
+  const iv = setInterval(()=>{
+    n--;
+    if(n > 0){ countdownOverlay.textContent = n; }
+    else{
+      countdownOverlay.textContent = 'Ready';
+      setTimeout(()=>{
+        countdownOverlay.classList.add('hidden');
+        scanningEnabled = true;
+        lastSignalSeenMs = performance.now();
+      }, 500);
+      clearInterval(iv);
+    }
+  }, 700);
+}
+
+function setLockState(state){
+  if(lockState === state) return;
+  lockState = state;
+  statusBadge.className = 'status-badge badge-' + state;
+  statusBadge.textContent = state === 'searching' ? 'Searching…' : state === 'locked' ? 'Locked' : 'Paused';
+}
+
+function updateAccuracy(){
+  accuracyScoreEl.textContent = letterCount === 0 ? '—' : Math.round(confidentCount/letterCount*100) + '%';
+}
+
+function analyzeFrame(){
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    const avg = sampleBrightness();
+    if(avg !== null){
+      smoothedBrightness = smoothedBrightness === null ? avg : smoothedBrightness*SMOOTHING + avg*(1-SMOOTHING);
+      if(scanningEnabled) onBrightnessSample(smoothedBrightness, performance.now());
+    }
+  }
+  camRaf = requestAnimationFrame(analyzeFrame);
+}
+
+function onBrightnessSample(brightness, t){
+  runningMax = Math.max(brightness, runningMax*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
+  runningMin = Math.min(brightness, runningMin*CALIBRATION_DECAY + brightness*(1-CALIBRATION_DECAY));
+  const threshold = runningMin + (runningMax-runningMin)*0.5;
+  const contrast = runningMax - runningMin;
+  const rawOn = brightness >= threshold && contrast > 3;
+
+  debugInfo.textContent = `brightness: ${brightness.toFixed(1)} · contrast: ${contrast.toFixed(1)} · threshold: ${threshold.toFixed(1)}`;
+
+  if(rawOn === confirmedState){
+    pendingCount = 0; pendingState = null;
+  } else {
+    if(pendingState === rawOn){ pendingCount++; } else { pendingState = rawOn; pendingCount = 1; }
+    if(pendingCount >= CONFIRM_FRAMES){ confirmedState = rawOn; pendingCount = 0; }
+  }
+  const lightOn = confirmedState;
+  detectBox.classList.toggle('show', lightOn);
+  sizeHint.classList.toggle('show', contrast > 0 && contrast < 8);
+
+  if(contrast > 3) lastSignalSeenMs = t;
+  if(t - lastSignalSeenMs > SIGNAL_LOSS_TIMEOUT_MS()){
+    setLockState('paused');
+  } else {
+    setLockState(currentLetter || decodedText ? 'locked' : 'searching');
+  }
+
+  if(stateStartMs < 0){ stateStartMs = t; isOn = lightOn; return; }
+  if(lightOn !== isOn){
+    const duration = t - stateStartMs;
+    handleTransition(isOn, duration);
+    isOn = lightOn;
+    stateStartMs = t;
+  }
+}
+
+function handleTransition(wasOn, duration){
+  const unit = unitEstimateMs();
+  if(wasOn){
+    if(duration < 20) return;
+    const units = duration/unit;
+    const borderline = Math.abs(units - 2) < 0.4;
+    const symbol = units >= 2 ? '-' : '.';
+    currentLetter += symbol;
+    letterCount++;
+    if(!borderline) confidentCount++;
+    updateAccuracy();
+    liveMorseEl.textContent = currentLetter + (borderline ? ' (uncertain)' : '');
+  } else {
+    if(duration < 20) return;
+    const units = duration/unit;
+    if(units >= 5){ flushLetter(); decodedText += ' '; renderReceived(); }
+    else if(units >= 2){ flushLetter(); }
+  }
+}
+
+function flushLetter(){
+  if(!currentLetter) return;
+  const decoded = REVERSE_MAP[currentLetter];
+  decodedText += decoded ? decoded : '<span class="uncertain">_</span>';
+  currentLetter = '';
+  liveMorseEl.textContent = '\u00A0';
+  renderReceived();
+}
+
+function renderReceived(){ receivedTextEl.innerHTML = decodedText; }
+
+document.getElementById('btnStart').addEventListener('click', startCamera);
+document.getElementById('btnClear').addEventListener('click', ()=>{
+  resetAll();
+  if(camStream) runCountdown();
 });
 </script>
 </body>
